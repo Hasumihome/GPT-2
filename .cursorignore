@@ -1,0 +1,14 @@
+Read_PDF_env/
+GPT-2_traning_env/
+PDF/
+GPT-4_analysis_data/
+StudyData/
+Summary/
+Text/
+gpt2_finetuned/
+cache/
+file_list.txt/
+Dataset/
+OpenWebText/
+__pycache__/
+Storage/
