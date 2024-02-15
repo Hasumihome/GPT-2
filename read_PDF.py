@@ -4,6 +4,9 @@ import tkinter as tk
 from tkinter import filedialog
 import shutil
 from chardet import UniversalDetector
+import pytesseract
+from PIL import Image
+import pdf2image
 
 def detect_encoding(file_path):
     detector = UniversalDetector()
@@ -15,11 +18,16 @@ def detect_encoding(file_path):
         detector.close()
     return detector.result['encoding']
 
-def convert_vertical_to_horizontal(file_path, encoding):
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
-        lines = file.read().split('\n')
-    paragraphs = ' '.join(line if line else '\n' for line in lines)
-    return paragraphs
+def pdf_to_text_tesseract(pdf_path):
+    # PDFを画像に変換
+    images = pdf2image.convert_from_path(pdf_path)
+    
+    text = ""
+    for image in images:
+        # Tesseractを使用して画像からテキストを抽出
+        text += pytesseract.image_to_string(image, lang='jpn')
+    
+    return text
 
 # GUIウィンドウを作成
 root = tk.Tk()
@@ -42,13 +50,11 @@ with open(PDF, 'rb') as file:
             print(f"Writing text of page {page_num} to file...")
             text_file.write(f"Text of page {page_num}:\n\n{text}\n\n")
 
-# 縦書きのテキストを横書きに変換
+# PDFからテキストへの変換
 print("変換を開始します...")
-encoding = detect_encoding(text_file_path)
-with open(text_file_path, 'r', encoding='utf-8', errors='ignore') as file:
-    horizontal_text = convert_vertical_to_horizontal(text_file_path, encoding)
-with open(text_file_path, 'w', encoding=encoding) as file:
-    file.write(horizontal_text)
+text = pdf_to_text_tesseract(PDF)
+with open(text_file_path, 'w', encoding='utf-8') as file:
+    file.write(text)
 print("変換が完了しました。")
 
 # 移動先のディレクトリ
