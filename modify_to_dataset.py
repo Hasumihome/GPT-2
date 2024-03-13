@@ -1,7 +1,6 @@
 import MeCab
 import re
 import os
-import psutil
 from sklearn.model_selection import train_test_split
 from transformers import MarianMTModel, MarianTokenizer, GPT2Tokenizer
 import torch
@@ -46,10 +45,12 @@ def adjust_parameters_based_on_gpu_memory():
         reserved_memory = torch.cuda.memory_reserved(0)
         available_memory = total_memory - reserved_memory
         
-        if available_memory > 8e9:  # 8GB以上の空きがある場合
+        # 8GB以上16GB未満の空きがある場合
+        if available_memory > 8e9:
             batch_size = 16
             max_length = 512
-        elif available_memory > 4e9:  # 4GB以上の空きがある場合
+        # 4GB以上8GB未満の空きがある場合
+        elif available_memory > 4e9:
             batch_size = 8
             max_length = 256
         else:  # それ以下の場合
