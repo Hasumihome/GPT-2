@@ -37,37 +37,79 @@ def preprocess_text(text):
     words = replace_stopwords(words)
     return words
 
-# テキストの翻訳
+import torch
+from transformers import MarianMTModel, MarianTokenizer
+
+def adjust_parameters_based_on_gpu_memory():
+    if torch.cuda.is_available():
+        total_memory = torch.cuda.get_device_properties(0).total_memory
+        reserved_memory = torch.cuda.memory_reserved(0)
+        available_memory = total_memory - reserved_memory
+        
+        if available_memory > 8e9:  # 8GB以上の空きがある場合
+            batch_size = 16
+            max_length = 512
+        elif available_memory > 4e9:  # 4GB以上の空きがある場合
+            batch_size = 8
+            max_length = 256
+        else:  # それ以下の場合
+            batch_size = 4
+            max_length = 128
+    else:
+        batch_size = 2
+        max_length = 128
+    
+    return batch_size, max_length
+
 def translate_text(text):
     model_name = 'Helsinki-NLP/opus-mt-ja-en'
     tokenizer = MarianTokenizer.from_pretrained(model_name)
     model = MarianMTModel.from_pretrained(model_name)
 
-    # GPUが利用可能な場合はGPUを使用し、そうでない場合はCPUを使用します
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
-    sentences = text.split('。')
+    sentences = split_text_custom(text)
     translated_text = ''
 
-    for sentence in sentences:
-        # テキストをトークン化してモデルに入力できる形式に変換
-        inputs = tokenizer.encode(sentence, return_tensors="pt", max_length=512, truncation=True).to(device)
+    # GPUのメモリに基づいてバッチサイズと最大長を調整
+    batch_size, max_length = adjust_parameters_based_on_gpu_memory()
+    print(f"Batch size: {batch_size}, Max length: {max_length}")
 
-        # # GPUメモリ使用量を表示
-        # if torch.cuda.is_available():
-        #     print(f"Allocated: {torch.cuda.memory_allocated() / (1024 ** 3):.2f} GB")
-        #     print(f"Reserved: {torch.cuda.memory_reserved() / (1024 ** 3):.2f} GB")
+    sentence_batches = [sentences[i:i + batch_size] for i in range(0, len(sentences), batch_size)]
 
-        # モデルで翻訳を実行
-        outputs = model.generate(inputs, max_length=400, num_beams=4, early_stopping=True)
+    for batch in sentence_batches:
+        batch_input_ids = []
+        for sentence in batch:
+            inputs = tokenizer.encode(sentence, return_tensors="pt", max_length=max_length, truncation=True).to(device)
+            batch_input_ids.append(inputs)
 
-        # 翻訳結果をデコード
-        translated_sentence = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print(sentence + '\n' + translated_sentence)
-        translated_text += translated_sentence + '.\n'  # 各文を新しい行に配置
+        with torch.no_grad():
+            outputs = [model.generate(input_ids, max_length=max_length, num_beams=4, early_stopping=True) for input_ids in batch_input_ids]
+
+        for sentence, output in zip(batch, outputs):
+            translated_sentence = tokenizer.decode(output[0], skip_special_tokens=True)
+            print(sentence + '\n' + translated_sentence)
+            translated_text += translated_sentence + '.\n'
+
+        torch.cuda.empty_cache()
 
     return translated_text.strip()
+
+def split_text_custom(text):
+    # 空行でテキストを分割する
+    sections = text.split('\n\n')
+    
+    # 各セクションをさらに処理する
+    sentences = []
+    for section in sections:
+        # ここで、セクション内の文をさらに細かく分割するカスタムロジックを適用できます
+        sentences.extend(section.split('。'))
+    
+    # 空の要素を削除
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    return sentences
 
 # ファイルの前処理
 def preprocess_file(file_path):
